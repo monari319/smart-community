@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Community Problem Reporting System</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- App Header -->
+  <header>
+    <div class="logo">
+      <img class="brand-image" src="https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=160&h=160&q=80" alt="" aria-hidden="true" />
+      <span>Smart Community Portal</span>
+    </div>
+    <nav>
+      <button id="nav-resident" class="active" onclick="switchView('resident')" hidden>Resident Portal</button>
+      <button id="nav-admin" onclick="switchView('admin')" hidden>Admin Dashboard</button>
+      <button id="nav-logout" onclick="handleLogout()" hidden>Logout</button>
+    </nav>
+  </header>
+
+  <main>
+    <div id="view-auth" class="view active">
+      <section id="auth-welcome" class="card auth-welcome">
+        <img id="hero-image-primary" class="hero-image is-visible" src="https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=2400&q=85" alt="" aria-hidden="true" />
+        <img id="hero-image-secondary" class="hero-image" alt="" aria-hidden="true" />
+        <div class="hero-content">
+          <span class="hero-eyebrow">A cleaner community starts with us</span>
+          <h1>Small actions.<br />A brighter, greener future.</h1>
+          <p>When we come together, our neighborhoods can thrive. Share what needs attention, care for the places we call home, and help build a cleaner community for everyone.</p>
+          <div class="auth-actions">
+            <button type="button" class="btn-submit" onclick="showAuthForm('register')">Create an account</button>
+            <button type="button" class="btn-submit btn-login-choice" onclick="showAuthForm('login')">Log in</button>
+          </div>
+          <div class="hero-project-promo">
+            <span>COMMUNITY PROJECTS, REAL CHANGE</span>
+            <p>Cleaner parks, safer streets, greener shared spaces. Together, local projects turn good ideas into lasting improvements. Join in and help make it happen.</p>
+          </div>
+        </div>
+      </section>
+
+      <div id="auth-forms" class="auth-forms" hidden>
+        <div id="register-panel" class="card auth-card" hidden>
+          <span class="auth-eyebrow">JOIN YOUR COMMUNITY</span>
+          <h2>Create your account</h2>
+          <p class="auth-intro">Be part of the effort to build a cleaner, better neighborhood for everyone.</p>
+          <form id="register-form" onsubmit="handleRegister(event)">
+            <div class="form-group">
+              <label>Full Name</label>
+              <input type="text" id="reg-name" required placeholder="e.g. Jane Doe" />
+            </div>
+            <div class="form-group">
+              <label>Phone Number</label>
+              <input type="tel" id="reg-phone" required placeholder="e.g. +254 700 000000" />
+            </div>
+            <div class="form-group">
+              <label>Email Address</label>
+              <input type="email" id="reg-email" required placeholder="jane@example.com" />
+            </div>
+            <div class="form-group">
+              <label>Password</label>
+              <input type="password" id="reg-pass" autocomplete="new-password" required />
+            </div>
+            <div class="form-group">
+              <label for="reg-confirm-pass">Confirm Password</label>
+              <input type="password" id="reg-confirm-pass" autocomplete="new-password" required />
+            </div>
+            <button type="submit" class="btn-submit">Create account</button>
+          </form>
+          <button type="button" class="auth-back" onclick="showAuthWelcome()">Back to welcome</button>
+        </div>
+
+        <div id="login-panel" class="card auth-card" hidden>
+          <span class="auth-eyebrow">SMART COMMUNITY PORTAL</span>
+          <h2>Welcome back</h2>
+          <p class="auth-intro">Sign in to keep up with your neighborhood and the issues that matter.</p>
+          <form id="login-form" onsubmit="handleLogin(event)">
+            <div class="form-group">
+              <label>Email Address</label>
+              <input type="email" id="login-email" required placeholder="user@example.com" />
+            </div>
+            <div class="form-group">
+              <label>Password</label>
+              <input type="password" id="login-pass" required />
+            </div>
+            <div class="form-group">
+              <label>Login As Role</label>
+              <select id="login-role">
+                <option value="resident">Resident</option>
+                <option value="admin">Administrator</option>
+              </select>
+            </div>
+            <button type="submit" class="btn-submit">Login</button>
+          </form>
+          <button type="button" class="auth-back" onclick="showAuthWelcome()">Back to welcome</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. RESIDENT PORTAL VIEW -->
+    <div id="view-resident" class="view resident-dashboard">
+      <div class="resident-heading">
+        <div>
+          <p class="resident-kicker">COMMUNITY PORTAL / RESIDENT</p>
+          <h2>Resident dashboard</h2>
+          <p class="resident-description">Report local concerns and follow the progress of issues you have raised.</p>
+        </div>
+      </div>
+      
+      <!-- Statistics Cards -->
+      <div class="stats-grid">
+        <div class="stat-card stat-total">
+          <h3 id="res-stat-total"></h3>
+          <p>My Total Reports</p>
+        </div>
+        <div class="stat-card stat-pending">
+          <h3 id="res-stat-pending">0</h3>
+          <p>In Progress / Review</p>
+        </div>
+        <div class="stat-card stat-resolved">
+          <h3 id="res-stat-resolved">0</h3>
+          <p>Resolved Reports</p>
+        </div>
+      </div>
+
+      <div class="grid-2 resident-report-grid">
+        <!-- Submit Report Form -->
+        <div class="card resident-panel">
+          <div class="resident-panel-heading">
+            <h2>Submit a report</h2>
+            <p>Share a local issue so it can be reviewed by your community team.</p>
+          </div>
+          <form id="report-form" onsubmit="handleReportSubmit(event)">
+            <div class="form-group">
+              <label>Report Title</label>
+              <input type="text" id="rep-title" required placeholder="e.g. Broken streetlight on 4th Ave" />
+            </div>
+            <div class="form-group">
+              <label>Category</label>
+              <select id="rep-category" required>
+                <option value="">Select Category...</option>
+                <option value="Roads">Damaged Roads</option>
+                <option value="Lighting">Street Lighting</option>
+                <option value="Waste">Waste Accumulation</option>
+                <option value="Drainage">Drainage Issues</option>
+                <option value="Water">Water Problems</option>
+                <option value="Security">Security Concerns</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Location Name</label>
+              <input type="text" id="rep-location" required placeholder="e.g. Sector 3, Main Street" />
+            </div>
+            <div class="form-group">
+              <label>GPS Coordinates (Optional)</label>
+              <input type="text" id="rep-coords" placeholder="-0.5167, 34.4500" />
+            </div>
+            <div class="form-group">
+              <label>Description</label>
+              <textarea id="rep-desc" required placeholder="Detailed explanation of the issue..."></textarea>
+            </div>
+            <div class="form-group">
+              <label>Photo Evidence (Optional)</label>
+              <input type="file" id="rep-photo" accept="image/*" />
+            </div>
+            <button type="submit" class="btn-submit">Submit Report</button>
+          </form>
+        </div>
+
+        <!-- Personal Submitted Reports Table -->
+        <div class="card resident-panel">
+          <div class="resident-panel-heading">
+            <h2>Your submitted reports</h2>
+            <p>Track the latest status of the concerns you have raised.</p>
+          </div>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Category</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody id="resident-reports-table">
+                <!-- Dynamic Data -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. ADMIN DASHBOARD VIEW -->
+    <div id="view-admin" class="view">
+      <h2>Administrative Control Center</h2>
+
+      <!-- Admin Summary Cards -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <h3 id="admin-stat-total">0</h3>
+          <p>Total Community Reports</p>
+        </div>
+        <div class="stat-card">
+          <h3 id="admin-stat-review">0</h3>
+          <p>Under Review</p>
+        </div>
+        <div class="stat-card">
+          <h3 id="admin-stat-progress">0</h3>
+          <p>In Progress</p>
+        </div>
+        <div class="stat-card">
+          <h3 id="admin-stat-resolved">0</h3>
+          <p>Resolved</p>
+        </div>
+      </div>
+
+      <!-- Interactive Map Visualization Placeholder -->
+      <div class="map-container">
+        📍 Interactive GIS Report Coordinates Map View (Supabase GIS Integration)
+      </div>
+
+      <!-- Filters & Search Bar -->
+      <div class="filter-bar">
+        <input type="text" id="admin-search" placeholder="Search by title or description..." oninput="renderAdminReports()" />
+        <select id="admin-filter-status" onchange="renderAdminReports()">
+          <option value="ALL">All Statuses</option>
+          <option value="Submitted">Submitted</option>
+          <option value="Under Review">Under Review</option>
+          <option value="In Progress">In Progress</option>
+          <option value="Resolved">Resolved</option>
+          <option value="Rejected">Rejected</option>
+        </select>
+      </div>
+
+      <!-- Centralized Management Table -->
+      <div class="card">
+        <h2>Report Management Overview</h2>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Title</th>
+                <th>Category</th>
+                <th>Location</th>
+                <th>Submitted By</th>
+                <th>Status</th>
+                <th>Action State</th>
+                <th>Delete</th>
+              </tr>
+            </thead>
+            <tbody id="admin-reports-table">
+              <!-- Dynamic Data -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Registered Residents Directory -->
+      <div class="card">
+        <h2>Registered Residents Directory</h2>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Verification State</th>
+              </tr>
+            </thead>
+            <tbody id="admin-residents-table">
+              <!-- Dynamic Data -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>&copy; 2026 Smart Community Portal. All rights reserved.</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
