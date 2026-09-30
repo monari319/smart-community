@@ -267,14 +267,129 @@ function getBadgeClass(status) {
   }
 }
 
+const COMMUNITY_ASSISTANT_URL = 'https://ombmscbaavdsmulbxmxg.supabase.co/functions/v1/community-assistant';
+const COMMUNITY_ASSISTANT_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhbGciOiJIUzI1NiIsInJlZiI6Im9tYm1zY2JhYXZkc211bGJ4bXhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2OTIwNTAsImV4cCI6MjEwNjI2ODA1MH0.XItxECKcDeLZAeiQistVdMgqrDRiW1U20AKvC48YY-g';
+let communityAssistantHistory = [];
+
+function addAssistantMessage(text, sender) {
+  const messages = document.getElementById('assistant-messages');
+  const message = document.createElement('div');
+  const paragraph = document.createElement('p');
+  message.className = `assistant-message assistant-message-${sender}`;
+  paragraph.textContent = text;
+  message.appendChild(paragraph);
+  messages.appendChild(message);
+  messages.scrollTop = messages.scrollHeight;
+  return message;
+}
+
+function getCommunityHelpReply(question) {
+  const normalizedQuestion = question.toLowerCase();
+
+  if (/\b(my reports|my report|where is|find my|how many)\b/.test(normalizedQuestion) && currentUser) {
+    const myReports = mockReports.filter(report => report.userEmail === currentUser.email);
+    if (myReports.length === 0) return 'You do not have any reports in this session yet. You can submit one from the resident dashboard.';
+    return `You have ${myReports.length} report${myReports.length === 1 ? '' : 's'} in this session: ${myReports.map(report => `${report.title} (${report.status})`).join('; ')}.`;
+  }
+  if (/\b(status(?:es)?|submitted|under review|in progress|resolved|rejected|track|progress)\b/.test(normalizedQuestion)) {
+    return 'Submitted means the report has been received. Under Review means the community team is assessing it. In Progress means work is underway. Resolved means it has been addressed, and Rejected means it will not be actioned. Residents can track reports in Your submitted reports.';
+  }
+  if (/\b(report|submit|raise|file)\b/.test(normalizedQuestion)) {
+    return 'To report an issue, log in as a resident and open the Submit a report form. Add a title, category, location, and description; a photo and GPS coordinates are optional.';
+  }
+  if (/\b(login|log in|account|register|sign up|password)\b/.test(normalizedQuestion)) {
+    return 'Use Create an account to register as a resident, or Log in if you already have an account. If you have trouble signing in, check that the selected role matches your account.';
+  }
+  if (/\b(admin|administrator|dashboard)\b/.test(normalizedQuestion)) {
+    return 'The admin dashboard is for administrators. It shows community reports, lets admins filter and update report statuses, and includes the residents directory.';
+  }
+  return 'I can help with submitting a community report, understanding report statuses, finding your reports, or using the resident and admin dashboards. Which would you like to know about?';
+}
+
+async function askCommunityAssistant(question) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 12000);
+
+  try {
+    const response = await fetch(COMMUNITY_ASSISTANT_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${COMMUNITY_ASSISTANT_ANON_KEY}`,
+        'apikey': COMMUNITY_ASSISTANT_ANON_KEY
+      },
+      body: JSON.stringify({
+        messages: communityAssistantHistory.slice(-12)
+      }),
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error('Assistant service is unavailable');
+    const result = await response.json();
+    const reply = result.reply || result.message || result.choices?.[0]?.message?.content;
+    if (typeof reply !== 'string' || !reply.trim()) throw new Error('Assistant returned no reply');
+    return reply.trim();
+  } catch {
+    return `${getCommunityHelpReply(question)}\n\nThe AI service is not connected right now, so this is a built-in portal help response.`;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+function setAssistantOpen(isOpen) {
+  document.getElementById('assistant-panel').hidden = !isOpen;
+  document.getElementById('assistant-toggle').setAttribute('aria-expanded', String(isOpen));
+  if (isOpen) document.getElementById('assistant-input').focus();
+}
+
+async function handleAssistantSubmit(event) {
+  event.preventDefault();
+  const input = document.getElementById('assistant-input');
+  const sendButton = document.getElementById('assistant-send');
+  const question = input.value.trim();
+  if (!question || sendButton.disabled) return;
+
+  addAssistantMessage(question, 'user');
+  communityAssistantHistory.push({ role: 'user', content: question });
+  input.value = '';
+  sendButton.disabled = true;
+  const pendingMessage = addAssistantMessage('Thinking...', 'bot assistant-message-pending');
+  const reply = await askCommunityAssistant(question);
+  pendingMessage.remove();
+  addAssistantMessage(reply, 'bot');
+  communityAssistantHistory.push({ role: 'assistant', content: reply });
+  sendButton.disabled = false;
+  input.focus();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const assistantForm = document.getElementById('assistant-form');
+  const assistantToggle = document.getElementById('assistant-toggle');
+  const assistantClose = document.getElementById('assistant-close');
+
+  assistantForm.addEventListener('submit', handleAssistantSubmit);
+  assistantToggle.addEventListener('click', () => setAssistantOpen(true));
+  assistantClose.addEventListener('click', () => {
+    setAssistantOpen(false);
+    assistantToggle.focus();
+  });
+  document.querySelectorAll('[data-assistant-prompt]').forEach(button => {
+    button.addEventListener('click', () => {
+      document.getElementById('assistant-input').value = button.dataset.assistantPrompt;
+      assistantForm.requestSubmit();
+    });
+  });
+});
+
 // Initialize View on Page Load
 document.addEventListener("DOMContentLoaded", () => {
   switchView('auth');
   startHeroSlideshow();
 });
 
+/*
+
 // Initialize Supabase Client
-const SUPABASE_URL = 'https://ombmscbaavdsmulbxmxg.supabase.com';
+const SUPABASE_URL = 'https://ombmscbaavdsmulbxmxg.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tYm1zY2JhYXZkc211bGJ4bXhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2OTIwNTAsImV4cCI6MjEwNjI2ODA1MH0.XItxECKcDeLZAeiQistVdMgqrDRiW1U20AKvC48YY-g';
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -283,90 +398,125 @@ async function registerResident(email, password, fullName, phone) {
     const { data, error } = await supabase.auth.signUp({
         email: email,
         password: password,
+
+      const COMMUNITY_ASSISTANT_URL = 'https://ombmscbaavdsmulbxmxg.supabase.co/functions/v1/community-assistant';
+      const COMMUNITY_ASSISTANT_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhbGciOiJIUzI1NiIsInJlZiI6Im9tYm1zY2JhYXZkc211bGJ4bXhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2OTIwNTAsImV4cCI6MjEwNjI2ODA1MH0.XItxECKcDeLZAeiQistVdMgqrDRiW1U20AKvC48YY-g';
+
+      function addAssistantMessage(text, sender) {
+        const messages = document.getElementById('assistant-messages');
+        const message = document.createElement('div');
+        const paragraph = document.createElement('p');
+        message.className = `assistant-message assistant-message-${sender}`;
+        paragraph.textContent = text;
+        message.appendChild(paragraph);
+        messages.appendChild(message);
+        messages.scrollTop = messages.scrollHeight;
+        return message;
+      }
+
+      function getCommunityHelpReply(question) {
+        const normalizedQuestion = question.toLowerCase();
+
+        if (/\b(report|submit|raise|file)\b/.test(normalizedQuestion)) {
+          return 'To report an issue, log in as a resident and open the Submit a report form. Add a short title, category, location, and description; a photo and GPS coordinates are optional. Select Submit Report when you are ready.';
+        }
+
+        if (/\b(status|submitted|under review|in progress|resolved|rejected|track|progress)\b/.test(normalizedQuestion)) {
+          return 'Submitted means the report has been received. Under Review means the community team is assessing it. In Progress means work is underway. Resolved means it has been addressed, and Rejected means it will not be actioned. Residents can track reports in Your submitted reports.';
+        }
+
+        if (/\b(my reports|my report|where is|find my|how many)\b/.test(normalizedQuestion) && currentUser) {
+          const myReports = mockReports.filter(report => report.userEmail === currentUser.email);
+          if (myReports.length === 0) return 'You do not have any reports in this session yet. You can submit one from the resident dashboard.';
+          return `You have ${myReports.length} report${myReports.length === 1 ? '' : 's'} in this session: ${myReports.map(report => `${report.title} (${report.status})`).join('; ')}.`;
+        }
+
+        if (/\b(login|log in|account|register|sign up|password)\b/.test(normalizedQuestion)) {
+          return 'Use Create an account to register as a resident, or Log in if you already have an account. If you have trouble signing in, check that the selected role matches your account.';
+        }
+
+        if (/\b(admin|administrator|dashboard)\b/.test(normalizedQuestion)) {
+          return 'The admin dashboard is for administrators. It shows community reports, lets admins filter and update report statuses, and includes the residents directory.';
+        }
+
+        return 'I can help with submitting a community report, understanding report statuses, finding your reports, or using the resident and admin dashboards. Which would you like to know about?';
+      }
+
+      async function askCommunityAssistant(question) {
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), 12000);
+
+        try {
+          const response = await fetch(COMMUNITY_ASSISTANT_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${COMMUNITY_ASSISTANT_ANON_KEY}`,
+              'apikey': COMMUNITY_ASSISTANT_ANON_KEY
+            },
+            body: JSON.stringify({
+              messages: [{ role: 'user', content: question }],
+              context: 'You are the helpful assistant for a community issue reporting portal. Give concise, practical answers about community reporting and portal navigation.'
+            }),
+            signal: controller.signal
+          });
+
+          if (!response.ok) throw new Error('Assistant service is unavailable');
+          const result = await response.json();
+          const reply = result.reply || result.message || result.choices?.[0]?.message?.content;
+          if (typeof reply !== 'string' || !reply.trim()) throw new Error('Assistant returned no reply');
+          return reply.trim();
+        } catch {
+          return `${getCommunityHelpReply(question)}\n\nThe AI service is not connected right now, so this is a built-in portal help response.`;
+        } finally {
+          window.clearTimeout(timeoutId);
+        }
+      }
+
+      function setAssistantOpen(isOpen) {
+        document.getElementById('assistant-panel').hidden = !isOpen;
+        document.getElementById('assistant-toggle').setAttribute('aria-expanded', String(isOpen));
+        if (isOpen) document.getElementById('assistant-input').focus();
+      }
+
+      async function handleAssistantSubmit(event) {
+        event.preventDefault();
+        const input = document.getElementById('assistant-input');
+        const sendButton = document.getElementById('assistant-send');
+        const question = input.value.trim();
+        if (!question || sendButton.disabled) return;
+
+        addAssistantMessage(question, 'user');
+        input.value = '';
+        sendButton.disabled = true;
+        const pendingMessage = addAssistantMessage('Thinking...', 'bot assistant-message-pending');
+
+        const reply = await askCommunityAssistant(question);
+        pendingMessage.remove();
+        addAssistantMessage(reply, 'bot');
+        sendButton.disabled = false;
+        input.focus();
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        const assistantForm = document.getElementById('assistant-form');
+        const assistantToggle = document.getElementById('assistant-toggle');
+        const assistantClose = document.getElementById('assistant-close');
+
+        assistantForm.addEventListener('submit', handleAssistantSubmit);
+        assistantToggle.addEventListener('click', () => setAssistantOpen(true));
+        assistantClose.addEventListener('click', () => assistantToggle.focus() || setAssistantOpen(false));
+        document.querySelectorAll('[data-assistant-prompt]').forEach(button => {
+          button.addEventListener('click', () => {
+            document.getElementById('assistant-input').value = button.dataset.assistantPrompt;
+            assistantForm.requestSubmit();
+          });
+        });
+      });
         options: {
             data: {
                 name: fullName,
                 phone: phone,
                 role: 'resident'
             }
-        }
-    });
-    return { data, error };
-}
-
-// 2. Submit Community Report with Evidence Photo
-async function submitReport({ title, description, category, location, lat, lng, imageFile }) {
-    const user = supabase.auth.user();
-    let imageUrl = null;
-
-    if (imageFile) {
-        const filePath = `${user.id}/${Date.now()}_${imageFile.name}`;
-        const { data: uploadData, error: uploadError } = await supabase
-            .storage
-            .from('report-images')
-            .upload(filePath, imageFile);
-
-        if (uploadError) throw uploadError;
-
-        const { data: publicUrlData } = supabase
-            .storage
-            .from('report-images')
-            .getPublicUrl(filePath);
-            
-        imageUrl = publicUrlData.publicUrl;
-    }
-
-    const { data, error } = await supabase
-        .from('reports')
-        .insert([{
-            user_id: user.id,
-            title,
-            description,
-            category,
-            location,
-            latitude: lat,
-            longitude: lng,
-            image_url: imageUrl
-        }]);
-
-    return { data, error };
-}
-
-async function fetchUserReports() {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    const { data: reports, error } = await supabase
-        .from('reports')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-    if (error) console.error('Error loading reports:', error);
-    else renderResidentDashboard(reports);
-}
-
-async function fetchAllReportsForAdmin() {
-    const { data: reports, error } = await supabase
-        .from('reports')
-        .select(`
-            *,
-            profiles (name, phone)
-        `)
-        .order('created_at', { ascending: false });
-
-    if (error) console.error('Error fetching admin reports:', error);
-    else {
-        renderAdminTable(reports);
-        plotReportsOnMap(reports); // Pass coordinates (lat, lng) to Leaflet / Mapbox
-    }
-}
-
-async function updateReportStatus(reportId, newStatus) {
-    const { data, error } = await supabase
-        .from('reports')
-        .update({ status: newStatus, updated_at: new Date() })
-        .eq('id', reportId);
-
-    if (error) alert('Failed to update status: ' + error.message);
-    else fetchAllReportsForAdmin();
-}
+*/

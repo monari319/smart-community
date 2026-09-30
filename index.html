@@ -282,6 +282,40 @@
     </div>
   </main>
 
+  <section class="assistant" aria-label="Community AI assistant">
+    <div id="assistant-panel" class="assistant-panel" aria-labelledby="assistant-title" hidden>
+      <div class="assistant-header">
+        <div class="assistant-identity">
+          <span class="assistant-mark" aria-hidden="true">AI</span>
+          <div>
+            <h2 id="assistant-title">Community assistant</h2>
+            <p>Here to help with your community portal</p>
+          </div>
+        </div>
+        <button id="assistant-close" class="assistant-close" type="button" aria-label="Close assistant">&times;</button>
+      </div>
+      <div id="assistant-messages" class="assistant-messages" aria-live="polite" aria-relevant="additions text">
+        <div class="assistant-message assistant-message-bot">
+          <p>Hi! I can help you report a local issue, understand report statuses, or find your way around the portal. What would you like to know?</p>
+        </div>
+        <div class="assistant-suggestions" aria-label="Suggested questions">
+          <button type="button" data-assistant-prompt="How do I report an issue?">How do I report an issue?</button>
+          <button type="button" data-assistant-prompt="What do the report statuses mean?">What do the report statuses mean?</button>
+        </div>
+      </div>
+      <form id="assistant-form" class="assistant-form">
+        <label class="visually-hidden" for="assistant-input">Ask the community assistant</label>
+        <input id="assistant-input" name="question" type="text" maxlength="1000" placeholder="Ask a question..." autocomplete="off" required />
+        <button id="assistant-send" type="submit" aria-label="Send question">Send</button>
+      </form>
+      <p class="assistant-note">Please don't share passwords or sensitive personal details.</p>
+    </div>
+    <button id="assistant-toggle" class="assistant-toggle" type="button" aria-expanded="false" aria-controls="assistant-panel">
+      <span class="assistant-toggle-mark" aria-hidden="true">AI</span>
+      <span>Ask Community AI</span>
+    </button>
+  </section>
+
   <footer class="site-footer">
     <p>&copy; 2026 Smart Community Portal. All rights reserved.</p>
   </footer>
