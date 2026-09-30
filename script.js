@@ -1,6 +1,10 @@
-// --- Mock Data Store ---
+// --- Supabase Client ---
+const SUPABASE_URL = 'https://ombmscbaavdsmulbxmxg.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_MJR1fuH80JeYUjq8149iFQ_v818TjGZ';
+const supabaseClient = window.supabase?.createClient && !SUPABASE_PUBLISHABLE_KEY.startsWith('PASTE_')
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+  : null;
 let currentUser = null;
-let registeredAccounts = JSON.parse(localStorage.getItem('communityAccounts') || '[]');
 const heroSlides = [
   'https://images.unsplash.com/photo-1472396961693-142e6e269027?auto=format&fit=crop&w=2400&q=85',
   'https://images.unsplash.com/photo-1497250681960-ef046c08a56e?auto=format&fit=crop&w=2400&q=85',
@@ -13,12 +17,7 @@ const heroSlides = [
 let heroSlideIndex = 0;
 let heroSlideshowTimer = null;
 
-let mockUsers = [
-  { name: "Brian Monari", email: "bmonari94@gmail.com", phone: "0712345678", status: "Verified" },
-  { name: "Rispa Akoko", email: "rispa8477@gmail.com", phone: "0723456789", status: "Verified" },
-  { name: "Geofrey Oluoch", email: "geofreyoluoch21@gmail.com", phone: "0734567890", status: "Pending Verification" }
-];
-
+let mockUsers = [];
 let mockReports = [];
 
 // --- Core Navigation ---
@@ -81,29 +80,86 @@ function stopHeroSlideshow() {
   heroSlideshowTimer = null;
 }
 
-// --- Resident Logic ---
-function handleReportSubmit(e) {
-  e.preventDefault();
-  const newReport = {
-    id: `REP-${Math.floor(100 + Math.random() * 900)}`,
-    title: document.getElementById('rep-title').value,
-    category: document.getElementById('rep-category').value,
-    location: document.getElementById('rep-location').value,
-    coords: document.getElementById('rep-coords').value,
-    description: document.getElementById('rep-desc').value,
-    status: "Submitted",
-    userEmail: currentUser.email,
-    date: new Date().toISOString().split('T')[0]
-  };
+function getSupabaseErrorMessage(error) {
+  const message = error?.message || String(error);
+  if (/invalid api key|no api key/i.test(message)) {
+    return 'Supabase rejected the project key. Replace SUPABASE_PUBLISHABLE_KEY in script.js with the current Publishable key from Project Settings > API Keys, and make sure it belongs to the configured project URL.';
+  }
+  if (/row.level security|permission denied|not allowed/i.test(message)) {
+    return 'Supabase denied this operation. Apply the policies in supabase/schema.sql and confirm the signed-in user has permission.';
+  }
+  if (/relation .* does not exist|table .* not found/i.test(message)) {
+    return 'The Supabase table is missing. Apply supabase/schema.sql in the Supabase SQL Editor.';
+  }
+  if (/database error saving new user/i.test(message)) {
+    return 'Supabase could not create the account because its profile trigger failed. Run supabase/fix-registration-trigger.sql in the Supabase SQL Editor, then try again. If it still fails, check the Supabase Postgres logs for the underlying database error.';
+  }
+  return message;
+}
 
-  mockReports.unshift(newReport);
-  alert("Report successfully created and saved to system database!");
-  document.getElementById('report-form').reset();
-  renderResidentDashboard();
+// --- Resident Logic ---
+async function handleReportSubmit(e) {
+  e.preventDefault();
+  if (!supabaseClient || !currentUser) {
+    alert('Please sign in and set SUPABASE_PUBLISHABLE_KEY at the top of script.js to your current Supabase Publishable key.');
+    return;
+  }
+
+  const form = document.getElementById('report-form');
+  const submitButton = form.querySelector('[type="submit"]');
+  const coordinates = document.getElementById('rep-coords').value.trim();
+  let latitude = null;
+  let longitude = null;
+
+  if (coordinates) {
+    const parsedCoordinates = coordinates.split(',').map(value => Number(value.trim()));
+    if (parsedCoordinates.length !== 2 || parsedCoordinates.some(value => !Number.isFinite(value))) {
+      alert('Enter GPS coordinates as latitude, longitude.');
+      return;
+    }
+    [latitude, longitude] = parsedCoordinates;
+  }
+
+  submitButton.disabled = true;
+  try {
+    let imageUrl = null;
+    const imageFile = document.getElementById('rep-photo').files[0];
+    if (imageFile) {
+      const safeName = imageFile.name.replace(/[^\w.-]/g, '_');
+      const filePath = `${currentUser.id}/${crypto.randomUUID()}-${safeName}`;
+      const { error: uploadError } = await supabaseClient.storage
+        .from('report-images')
+        .upload(filePath, imageFile);
+      if (uploadError) throw uploadError;
+      imageUrl = supabaseClient.storage.from('report-images').getPublicUrl(filePath).data.publicUrl;
+    }
+
+    const { data, error } = await supabaseClient.from('reports').insert({
+      user_id: currentUser.id,
+      title: document.getElementById('rep-title').value.trim(),
+      category: document.getElementById('rep-category').value,
+      location: document.getElementById('rep-location').value.trim(),
+      latitude,
+      longitude,
+      description: document.getElementById('rep-desc').value.trim(),
+      image_url: imageUrl
+    }).select().single();
+    if (error) throw error;
+
+    mockReports.unshift({ ...data, userEmail: currentUser.email });
+    form.reset();
+    renderResidentDashboard();
+    alert('Report saved successfully.');
+  } catch (error) {
+    console.error('Report submission failed:', error);
+    alert(`Report could not be saved: ${getSupabaseErrorMessage(error)}`);
+  } finally {
+    submitButton.disabled = false;
+  }
 }
 
 function renderResidentDashboard() {
-  const myReports = mockReports.filter(r => r.userEmail === currentUser.email || currentUser.email === "resident@tmu.ac.ke");
+  const myReports = mockReports.filter(report => report.user_id === currentUser.id);
   
   // Update Stats
   document.getElementById('res-stat-total').innerText = myReports.length || '';
@@ -117,7 +173,7 @@ function renderResidentDashboard() {
       <td><strong>${r.title}</strong></td>
       <td>${r.category}</td>
       <td><span class="badge badge-${getBadgeClass(r.status)}">${r.status}</span></td>
-      <td>${r.date}</td>
+      <td>${(r.created_at || '').slice(0, 10)}</td>
     </tr>
   `).join('') || `<tr><td colspan="4" style="text-align:center;">No reports found.</td></tr>`;
 }
@@ -181,24 +237,74 @@ function renderResidentsDirectory() {
   `).join('');
 }
 
-function updateReportStatus(reportId, newStatus) {
-  const report = mockReports.find(r => r.id === reportId);
-  if (report) {
-    report.status = newStatus;
-    renderAdminDashboard();
-  }
+async function fetchAllReportsForAdmin() {
+  const [{ data: reports, error: reportError }, { data: profiles, error: profilesError }] = await Promise.all([
+    supabaseClient.from('reports').select('*, profiles(email)').order('created_at', { ascending: false }),
+    supabaseClient.from('profiles').select('name, email, phone, role').order('created_at', { ascending: false })
+  ]);
+  if (reportError) throw reportError;
+  if (profilesError) throw profilesError;
+
+  mockReports = reports.map(({ profiles: profile, ...report }) => ({ ...report, userEmail: profile?.email || '' }));
+  mockUsers = profiles.map(profile => ({ ...profile, status: 'Verified' }));
+  renderAdminDashboard();
 }
 
-function deleteReport(reportId) {
+async function updateReportStatus(reportId, newStatus) {
+  const { error } = await supabaseClient.from('reports').update({ status: newStatus }).eq('id', reportId);
+  if (error) {
+    alert(`Report status could not be saved: ${error.message}`);
+    return;
+  }
+  await fetchAllReportsForAdmin();
+}
+
+async function deleteReport(reportId) {
   if (confirm(`Are you sure you want to delete report ${reportId}?`)) {
-    mockReports = mockReports.filter(r => r.id !== reportId);
-    renderAdminDashboard();
+    const { error } = await supabaseClient.from('reports').delete().eq('id', reportId);
+    if (error) {
+      alert(`Report could not be deleted: ${error.message}`);
+      return;
+    }
+    await fetchAllReportsForAdmin();
   }
 }
 
 // --- Authentication Handlers ---
-function handleRegister(e) {
+async function setCurrentUser(authUser) {
+  const { data: profile, error } = await supabaseClient
+    .from('profiles')
+    .select('name, phone, role')
+    .eq('id', authUser.id)
+    .maybeSingle();
+  if (error) throw error;
+
+  currentUser = {
+    id: authUser.id,
+    name: profile?.name || authUser.user_metadata?.name || '',
+    email: authUser.email,
+    phone: profile?.phone || authUser.user_metadata?.phone || '',
+    role: authUser.app_metadata?.role || profile?.role || 'resident'
+  };
+}
+
+async function fetchUserReports() {
+  const { data, error } = await supabaseClient
+    .from('reports')
+    .select('*')
+    .eq('user_id', currentUser.id)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  mockReports = data.map(report => ({ ...report, userEmail: currentUser.email }));
+}
+
+async function handleRegister(e) {
   e.preventDefault();
+  if (!supabaseClient) {
+    alert('Set SUPABASE_PUBLISHABLE_KEY at the top of script.js to the current Publishable key from your Supabase project.');
+    return;
+  }
+
   const name = document.getElementById('reg-name').value;
   const email = document.getElementById('reg-email').value;
   const phone = document.getElementById('reg-phone').value;
@@ -210,47 +316,70 @@ function handleRegister(e) {
     return;
   }
 
-  if (registeredAccounts.some(account => account.email.toLowerCase() === email.toLowerCase())) {
-    alert("An account with this email already exists. Please log in instead.");
+  const submitButton = document.querySelector('#register-form [type="submit"]');
+  submitButton.disabled = true;
+  try {
+    const { data, error } = await supabaseClient.auth.signUp({
+      email,
+      password,
+      options: { data: { name, phone, role: 'resident' } }
+    });
+    if (error) throw error;
+
+    document.getElementById('register-form').reset();
+    document.getElementById('login-email').value = email;
+    showAuthForm('login');
+    alert(data.session
+      ? 'Registration successful. Your account details were saved.'
+      : 'Registration successful. Check your email to confirm your account before logging in.');
+  } catch (error) {
+    console.error('Registration failed:', error);
+    alert(`Registration failed: ${getSupabaseErrorMessage(error)}`);
+  } finally {
+    submitButton.disabled = false;
+  }
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  if (!supabaseClient) {
+    alert('Set SUPABASE_PUBLISHABLE_KEY at the top of script.js to the current Publishable key from your Supabase project.');
     return;
   }
 
-  const account = { name, email, phone, password, role: 'resident' };
-  registeredAccounts.push(account);
-  localStorage.setItem('communityAccounts', JSON.stringify(registeredAccounts));
-  mockUsers.push({ name, email, phone, status: "Pending Verification" });
-  alert("Registration successful! Please log in with your new account.");
-  document.getElementById('register-form').reset();
-  document.getElementById('login-email').value = email;
-  showAuthForm('login');
-}
-
-function handleLogin(e) {
-  e.preventDefault();
   const email = document.getElementById('login-email').value;
   const password = document.getElementById('login-pass').value;
   const role = document.getElementById('login-role').value;
-  const account = registeredAccounts.find(user =>
-    user.email.toLowerCase() === email.toLowerCase() && user.password === password
-  );
+  const submitButton = document.querySelector('#login-form [type="submit"]');
+  submitButton.disabled = true;
+  try {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    await setCurrentUser(data.user);
+    if (currentUser.role !== role) {
+      await supabaseClient.auth.signOut();
+      currentUser = null;
+      throw new Error('The selected role does not match this account.');
+    }
 
-  if (!account || account.role !== role) {
-    alert("Email or password is incorrect, or the selected role does not match your account.");
-    return;
-  }
-
-  currentUser = { name: account.name, email: account.email, role: account.role };
-  alert(`Logged in successfully as ${role.toUpperCase()}`);
-  
-  if (role === 'admin') {
-    switchView('admin');
-  } else {
-    switchView('resident');
+    if (role === 'admin') {
+      await fetchAllReportsForAdmin();
+    } else {
+      await fetchUserReports();
+    }
+    switchView(role === 'admin' ? 'admin' : 'resident');
+  } catch (error) {
+    console.error('Login failed:', error);
+    alert(`Login failed: ${getSupabaseErrorMessage(error)}`);
+  } finally {
+    submitButton.disabled = false;
   }
 }
 
-function handleLogout() {
+async function handleLogout() {
+  if (supabaseClient) await supabaseClient.auth.signOut();
   currentUser = null;
+  mockReports = [];
   showAuthWelcome();
   switchView('auth');
 }
@@ -267,8 +396,7 @@ function getBadgeClass(status) {
   }
 }
 
-const COMMUNITY_ASSISTANT_URL = 'https://ombmscbaavdsmulbxmxg.supabase.co/functions/v1/community-assistant';
-const COMMUNITY_ASSISTANT_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhbGciOiJIUzI1NiIsInJlZiI6Im9tYm1zY2JhYXZkc211bGJ4bXhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2OTIwNTAsImV4cCI6MjEwNjI2ODA1MH0.XItxECKcDeLZAeiQistVdMgqrDRiW1U20AKvC48YY-g';
+const COMMUNITY_ASSISTANT_URL = `${SUPABASE_URL}/functions/v1/community-assistant`;
 let communityAssistantHistory = [];
 
 function addAssistantMessage(text, sender) {
@@ -315,8 +443,8 @@ async function askCommunityAssistant(question) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${COMMUNITY_ASSISTANT_ANON_KEY}`,
-        'apikey': COMMUNITY_ASSISTANT_ANON_KEY
+        'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+        'apikey': SUPABASE_PUBLISHABLE_KEY
       },
       body: JSON.stringify({
         messages: communityAssistantHistory.slice(-12)
@@ -384,6 +512,20 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener("DOMContentLoaded", () => {
   switchView('auth');
   startHeroSlideshow();
+  if (supabaseClient) {
+    supabaseClient.auth.getSession().then(async ({ data, error }) => {
+      if (error) throw error;
+      if (!data.session) return;
+      await setCurrentUser(data.session.user);
+      if (currentUser.role === 'admin') {
+        await fetchAllReportsForAdmin();
+        switchView('admin');
+      } else {
+        await fetchUserReports();
+        switchView('resident');
+      }
+    }).catch(error => console.error('Could not restore Supabase session:', error));
+  }
 });
 
 /*
